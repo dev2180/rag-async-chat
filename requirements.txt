@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pydantic
+rq
+redis
+qdrant-client
+requests
+pytest
+sentence-transformers
+pypdf
+reportlab

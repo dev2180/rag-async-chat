@@ -1,0 +1,25 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Redis dump (if any)
+dump.rdb
+
+# Qdrant storage (if mounted locally)
+storage/
+
+# IDE
+.vscode/
+.idea/
