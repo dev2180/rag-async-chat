@@ -10,12 +10,24 @@ Must NOT:
     - Manage queues
 """
 
+import logging
 from pydantic import BaseModel
 from app.embedding.sentence_transformer_embedder import SentenceTransformerEmbedder
 from app.vectorstore.qdrant_client import QdrantVectorStore
 from app.rag.retriever import Retriever
 from app.rag.engine import RAGEngine
 from app.llm.ollama_client import OllamaClient
+from app.config import OLLAMA_MODEL, QDRANT_COLLECTION
+
+logger = logging.getLogger(__name__)
+
+# Module-level singletons — persist across jobs within the same worker process
+# Avoids reloading the ~90MB SentenceTransformer model on every request
+_embedder = None
+_vectorstore = None
+_retriever = None
+_llm = None
+_engine = None
 
 
 class RAGJobPayload(BaseModel):
@@ -26,19 +38,30 @@ class RAGJobPayload(BaseModel):
     query: str
 
 
+def _get_engine() -> RAGEngine:
+    """Lazy-initialize and cache the RAG engine components."""
+    global _embedder, _vectorstore, _retriever, _llm, _engine
+
+    if _engine is None:
+        logger.info("Initializing RAG engine components (first job)...")
+        _embedder = SentenceTransformerEmbedder()
+        _vectorstore = QdrantVectorStore(collection_name=QDRANT_COLLECTION)
+        _retriever = Retriever(_embedder, _vectorstore)
+        _llm = OllamaClient(model=OLLAMA_MODEL)
+        _engine = RAGEngine(_retriever, _llm)
+        logger.info("RAG engine ready.")
+
+    return _engine
+
+
 def rag_chat_task(payload_dict: dict) -> str:
     """
     Executes full RAG pipeline inside worker.
     """
-
     payload = RAGJobPayload(**payload_dict)
+    engine = _get_engine()
 
-    embedder = SentenceTransformerEmbedder()
-    vectorstore = QdrantVectorStore(collection_name="documents")
-    retriever = Retriever(embedder, vectorstore)
-    llm = OllamaClient(model="qwen2.5:7b-instruct")
-
-    engine = RAGEngine(retriever, llm)
+    logger.info(f"Processing query for session {payload.session_id}")
 
     return engine.answer(
         query=payload.query,

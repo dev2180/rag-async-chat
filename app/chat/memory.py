@@ -5,13 +5,17 @@ Handles chat history storage in Redis.
 """
 
 import json
+import logging
 from typing import List, Dict
 from app.queue.connection import redis_conn
+from app.config import MAX_CHAT_MESSAGES
+
+logger = logging.getLogger(__name__)
 
 
 class ChatMemory:
 
-    def __init__(self, session_id: str, max_messages: int = 10):
+    def __init__(self, session_id: str, max_messages: int = MAX_CHAT_MESSAGES):
         self.session_id = session_id
         self.key = f"chat:{session_id}"
         self.max_messages = max_messages
@@ -31,3 +35,4 @@ class ChatMemory:
 
     def clear(self):
         redis_conn.delete(self.key)
+        logger.info(f"Cleared chat history for session {self.session_id}")

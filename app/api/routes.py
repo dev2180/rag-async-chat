@@ -12,13 +12,22 @@ Must NOT:
     - Query Qdrant
 """
 
-from fastapi import APIRouter
+import logging
+from fastapi import APIRouter, HTTPException
 from rq.job import Job
 from app.queue.connection import rag_queue, redis_conn
 from app.api.schemas import QueryRequest, QueryResponse, JobStatusResponse
 from app.tasks.rag_task import rag_chat_task
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+@router.get("/health")
+def health_check():
+    """Health check endpoint."""
+    return {"status": "ok"}
 
 
 @router.post("/chat", response_model=QueryResponse)
@@ -29,7 +38,13 @@ def chat_endpoint(request: QueryRequest):
         "query": request.query
     }
 
-    job = rag_queue.enqueue(rag_chat_task, payload)
+    try:
+        job = rag_queue.enqueue(rag_chat_task, payload)
+    except Exception as e:
+        logger.error(f"Failed to enqueue job: {e}")
+        raise HTTPException(status_code=503, detail="Queue service unavailable. Is Redis running?")
+
+    logger.info(f"Job {job.id} queued for session {request.session_id}")
 
     return QueryResponse(
         job_id=job.id,
@@ -40,7 +55,10 @@ def chat_endpoint(request: QueryRequest):
 @router.get("/result/{job_id}", response_model=JobStatusResponse)
 def get_result(job_id: str):
 
-    job = Job.fetch(job_id, connection=redis_conn)
+    try:
+        job = Job.fetch(job_id, connection=redis_conn)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
 
     if job.is_finished:
         return JobStatusResponse(

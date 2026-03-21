@@ -9,12 +9,15 @@ Orchestrates PDF ingestion:
 - Upserting to Qdrant
 """
 
+import logging
 from pathlib import Path
 from app.ingestion.hasher import compute_file_hash
 from app.ingestion.pdf_loader import load_pdf_text
 from app.ingestion.chunker import chunk_text
 from app.embedding.base import BaseEmbedder
 from app.vectorstore.qdrant_client import QdrantVectorStore
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionPipeline:
@@ -31,49 +34,49 @@ class IngestionPipeline:
 
     def run(self):
 
-        print("\n[INFO] Starting ingestion pipeline...")
+        logger.info("Starting ingestion pipeline...")
 
         pdf_files = list(self.pdf_folder.glob("*.pdf"))
-        print(f"[INFO] Found {len(pdf_files)} PDF files")
+        logger.info(f"Found {len(pdf_files)} PDF files")
 
         self.vectorstore.create_collection(self.embedder.dimension)
 
         existing_doc_ids = self.vectorstore.get_all_doc_ids()
-        print(f"[INFO] Database contains {len(existing_doc_ids)} documents")
+        logger.info(f"Database contains {len(existing_doc_ids)} documents")
 
         current_hashes = set()
 
         for pdf_file in pdf_files:
-            print(f"\n[INFO] Processing: {pdf_file.name}")
+            logger.info(f"Processing: {pdf_file.name}")
 
             file_hash = compute_file_hash(pdf_file)
             current_hashes.add(file_hash)
 
             if file_hash in existing_doc_ids:
-                print("[INFO] No change detected. Skipping.")
+                logger.info("No change detected. Skipping.")
                 continue
 
-            print("[INFO] New or updated file detected.")
+            logger.info("New or updated file detected.")
             self._ingest_file(pdf_file, file_hash)
 
         for stored_doc_id in existing_doc_ids:
             if stored_doc_id not in current_hashes:
-                print(f"[INFO] Removing deleted document: {stored_doc_id}")
+                logger.info(f"Removing deleted document: {stored_doc_id}")
                 self.vectorstore.delete_by_doc_id(stored_doc_id)
 
-        print("\n[INFO] Ingestion complete.")
+        logger.info("Ingestion complete.")
 
     def _ingest_file(self, pdf_file: Path, file_hash: str):
 
         text = load_pdf_text(pdf_file)
 
         if not text.strip():
-            print("[WARNING] No extractable text. Skipping.")
+            logger.warning(f"No extractable text in {pdf_file.name}. Skipping.")
             return
 
         chunks = chunk_text(text)
 
-        print(f"[INFO] Creating embeddings for {len(chunks)} chunks...")
+        logger.info(f"Creating embeddings for {len(chunks)} chunks...")
 
         vectors = self.embedder.embed_batch(chunks)
 
@@ -89,4 +92,4 @@ class IngestionPipeline:
 
         self.vectorstore.upsert_vectors(vectors, payloads)
 
-        print("[INFO] Upsert complete.")
+        logger.info("Upsert complete.")

@@ -9,27 +9,29 @@ Must NOT:
     - Call LLM
 """
 
+import logging
 from typing import List, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 from uuid import uuid4
+from app.config import QDRANT_HOST, QDRANT_PORT, QDRANT_COLLECTION
 
-
-DEFAULT_COLLECTION = "documents"
+logger = logging.getLogger(__name__)
 
 
 class QdrantVectorStore:
 
     def __init__(
         self,
-        collection_name: str = DEFAULT_COLLECTION,
-        host: str = "localhost",
-        port: int = 6333,
+        collection_name: str = QDRANT_COLLECTION,
+        host: str = QDRANT_HOST,
+        port: int = QDRANT_PORT,
     ):
         self.collection_name = collection_name
         self.client = QdrantClient(host=host, port=port)
+        logger.info(f"QdrantVectorStore connected: {host}:{port}, collection={collection_name}")
 
     def create_collection(self, vector_dimension: int):
         """
@@ -45,6 +47,9 @@ class QdrantVectorStore:
                     distance=Distance.COSINE,
                 ),
             )
+            logger.info(f"Created collection '{self.collection_name}' (dim={vector_dimension})")
+        else:
+            logger.info(f"Collection '{self.collection_name}' already exists")
 
     def upsert_vectors(
         self,
@@ -70,6 +75,7 @@ class QdrantVectorStore:
             collection_name=self.collection_name,
             points=points,
         )
+        logger.info(f"Upserted {len(points)} vectors")
 
     def search(
         self,
@@ -85,11 +91,11 @@ class QdrantVectorStore:
                 limit=top_k,
             )
             return results.points
-    
+
     def collection_exists(self) -> bool:
         existing = [c.name for c in self.client.get_collections().collections]
         return self.collection_name in existing
-    
+
     def get_all_doc_ids(self) -> set[str]:
         """
         Returns all unique document IDs stored in the collection.
@@ -130,3 +136,4 @@ class QdrantVectorStore:
                 ]
             ),
         )
+        logger.info(f"Deleted vectors for doc_id={doc_id}")
