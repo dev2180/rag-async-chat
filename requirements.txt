@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 pydantic
-rq
+rq==1.16.2
 redis
 qdrant-client
 requests

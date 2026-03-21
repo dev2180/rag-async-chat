@@ -1,0 +1,111 @@
+﻿Testing app.config...
+Testing app.embedding...
+Testing app.vectorstore...
+Testing app.rag.retriever...
+Testing app.llm.ollama_client...
+Testing app.rag.engine...
+venv\Scripts\python.exe
+ : Traceback (most 
+recent call last):
+At line:1 char:1
++ venv\Scripts\python.e
+xe test_imports.py > 
+crash_log.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : 
+NotSpecified    : 
+(Traceback (most     
+recent call last)::    
+String) [], RemoteE    
+xception
+    + 
+FullyQualifiedErr    
+orId : NativeComman    
+dError
+ 
+  File "C:\Users\devsr\
+OneDrive\Desktop\major 
+project\rag-app\test_im
+ports.py", line 14, in 
+<module>
+    from 
+app.rag.engine import 
+RAGEngine
+  File "C:\Users\devsr\
+OneDrive\Desktop\major 
+project\rag-app\app\rag
+\engine.py", line 16, 
+in <module>
+    from 
+app.chat.memory import 
+ChatMemory
+  File "C:\Users\devsr\
+OneDrive\Desktop\major 
+project\rag-app\app\cha
+t\memory.py", line 10, 
+in <module>
+    from 
+app.queue.connection 
+import redis_conn
+  File "C:\Users\devsr\
+OneDrive\Desktop\major 
+project\rag-app\app\que
+ue\connection.py", 
+line 28, in <module>
+    from rq import 
+Queue
+  File "C:\Users\devsr\
+OneDrive\Desktop\major 
+project\rag-app\venv\li
+b\site-packages\rq\__in
+it__.py", line 6, in 
+<module>
+    from .worker 
+import SimpleWorker, 
+SpawnWorker, Worker
+  File "C:\Users\devsr\
+OneDrive\Desktop\major 
+project\rag-app\venv\li
+b\site-packages\rq\work
+er\__init__.py", line 
+2, in <module>
+    from .base import (
+  File "C:\Users\devsr\
+OneDrive\Desktop\major 
+project\rag-app\venv\li
+b\site-packages\rq\work
+er\base.py", line 48, 
+in <module>
+    from ..scheduler 
+import RQScheduler
+  File "C:\Users\devsr\
+OneDrive\Desktop\major 
+project\rag-app\venv\li
+b\site-packages\rq\sche
+duler.py", line 23, in 
+<module>
+    ForkProcess = get_c
+ontext('fork').Process
+  File "C:\Users\devsr\
+AppData\Local\Programs\
+Python\Python310\lib\mu
+ltiprocessing\context.p
+y", line 239, in 
+get_context
+    return super().get_
+context(method)
+  File "C:\Users\devsr\
+AppData\Local\Programs\
+Python\Python310\lib\mu
+ltiprocessing\context.p
+y", line 193, in 
+get_context
+    raise 
+ValueError('cannot 
+find context for %r' % 
+method) from None
+ValueError: cannot 
+find context for 'fork'
