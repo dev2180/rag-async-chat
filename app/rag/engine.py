@@ -43,7 +43,7 @@ class RAGEngine:
         memory = ChatMemory(session_id=session_id)
         history = memory.get_history()
 
-        with LatencyTracker("Retrieval") as t:
+        with LatencyTracker("Retrieval").measure() as t:
             payloads = self.retriever.retrieve(query, top_k=top_k)
         metrics.retrieval_ms = t.duration_ms
         eval_metrics = evaluate_retrieval(payloads)
@@ -52,7 +52,7 @@ class RAGEngine:
         context_chunks = [p.get("text", "") for p in payloads]
         prompt = build_prompt(query, context_chunks, history)
 
-        with LatencyTracker("LLM Generation") as t:
+        with LatencyTracker("LLM Generation").measure() as t:
             response = self.llm.generate(prompt)
         metrics.llm_ms = t.duration_ms
 
