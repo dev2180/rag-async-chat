@@ -37,12 +37,42 @@ MAX_CHAT_MESSAGES = int(os.getenv("MAX_CHAT_MESSAGES", 10))
 
 # --- Logging ---
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_DIR = os.getenv("LOG_DIR", "logs")
+LOG_FILE = os.getenv("LOG_FILE", "rag_app.log")
 
+def setup_logging(console_level=None):
+    """Configure logging for the application with file and console handlers."""
+    import logging.handlers
+    
+    # Create logs directory if it doesn't exist
+    os.makedirs(LOG_DIR, exist_ok=True)
+    log_path = os.path.join(LOG_DIR, LOG_FILE)
 
-def setup_logging():
-    """Configure logging for the application."""
-    logging.basicConfig(
-        level=getattr(logging, LOG_LEVEL.upper(), logging.INFO),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+    root_logger = logging.getLogger()
+    
+    # Remove any existing handlers
+    if root_logger.handlers:
+        root_logger.handlers.clear()
+
+    # Set base level
+    root_logger.setLevel(logging.DEBUG) # Allows handlers to filter at their own level
+
+    # 1. File Handler (Rotating)
+    file_fmt = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d): %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
     )
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    )
+    file_handler.setLevel(getattr(logging, LOG_LEVEL.upper(), logging.INFO))
+    file_handler.setFormatter(file_fmt)
+    root_logger.addHandler(file_handler)
+
+    # 2. Console Handler
+    target_console_level = console_level if console_level else LOG_LEVEL
+    console_fmt = logging.Formatter("[%(levelname)s] %(message)s")
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(getattr(logging, target_console_level.upper(), logging.INFO))
+    console_handler.setFormatter(console_fmt)
+    root_logger.addHandler(console_handler)

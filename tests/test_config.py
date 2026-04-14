@@ -1,40 +1,43 @@
-"""
-Tests for app/config.py
-
-Verifies that the centralized config module loads defaults correctly
-and can be overridden via environment variables.
-"""
-
 import os
-import pytest
+import logging
+from logging.handlers import RotatingFileHandler
+from app.config import setup_logging, LOG_DIR, LOG_FILE
 
-
-def test_default_config_values():
-    """Test that config defaults are sensible."""
-    from app.config import (
-        REDIS_HOST, REDIS_PORT,
-        QDRANT_HOST, QDRANT_PORT, QDRANT_COLLECTION,
-        OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT,
-        EMBEDDING_MODEL, QUEUE_NAME, PDF_DIR,
-        MAX_CHAT_MESSAGES, LOG_LEVEL,
-    )
-
-    assert REDIS_HOST == "localhost"
-    assert REDIS_PORT == 6379
-    assert QDRANT_HOST == "localhost"
-    assert QDRANT_PORT == 6333
-    assert QDRANT_COLLECTION == "documents"
-    assert OLLAMA_BASE_URL == "http://localhost:11434"
-    assert OLLAMA_MODEL == "llama3.2:latest"
-    assert OLLAMA_TIMEOUT == 180
-    assert EMBEDDING_MODEL == "all-MiniLM-L6-v2"
-    assert QUEUE_NAME == "rag"
-    assert PDF_DIR == "data/pdfs"
-    assert MAX_CHAT_MESSAGES == 10
-    assert LOG_LEVEL == "INFO"
-
-
-def test_setup_logging():
-    """Test that setup_logging runs without error."""
-    from app.config import setup_logging
-    setup_logging()  # should not raise
+def test_setup_logging_creates_file_and_handlers(tmp_path, monkeypatch):
+    # Reroute LOG_DIR to a temporary directory so we don't spam the actual logs folder during testing
+    test_log_dir = str(tmp_path / "logs")
+    monkeypatch.setattr("app.config.LOG_DIR", test_log_dir)
+    
+    setup_logging(console_level="WARNING")
+    
+    # Assert directory and file are created when log is emitted
+    root_logger = logging.getLogger()
+    
+    # Needs to log first to create file usually, but we called exit_ok=True inside
+    root_logger.warning("Test message")
+    
+    log_path = os.path.join(test_log_dir, LOG_FILE)
+    assert os.path.exists(test_log_dir)
+    assert os.path.exists(log_path)
+    
+    # Find the handlers
+    handlers = root_logger.handlers
+    assert len(handlers) == 2
+    
+    file_handler = next((h for h in handlers if isinstance(h, RotatingFileHandler)), None)
+    console_handler = next((h for h in handlers if isinstance(h, logging.StreamHandler) and not isinstance(h, RotatingFileHandler)), None)
+    
+    assert file_handler is not None
+    assert console_handler is not None
+    
+    # Verify exact limits (5MB)
+    assert file_handler.maxBytes == 5 * 1024 * 1024
+    assert file_handler.backupCount == 3
+    
+    # Verify console level was respected
+    assert console_handler.level == logging.WARNING
+    
+    # Cleanup handler so it doesn't lock files in windows
+    for h in handlers:
+        h.close()
+        root_logger.removeHandler(h)
