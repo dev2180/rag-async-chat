@@ -15,6 +15,7 @@ from app.ingestion.hasher import compute_file_hash
 from app.ingestion.pdf_loader import load_pdf_text
 from app.ingestion.chunker import chunk_text
 from app.embedding.base import BaseEmbedder
+from app.embedding.sparse_embedder import SparseEmbedder
 from app.vectorstore.qdrant_client import QdrantVectorStore
 
 logger = logging.getLogger(__name__)
@@ -26,10 +27,12 @@ class IngestionPipeline:
         self,
         pdf_folder: Path,
         embedder: BaseEmbedder,
+        sparse_embedder: SparseEmbedder,
         vectorstore: QdrantVectorStore,
     ):
         self.pdf_folder = pdf_folder
         self.embedder = embedder
+        self.sparse_embedder = sparse_embedder
         self.vectorstore = vectorstore
 
     def run(self):
@@ -78,7 +81,8 @@ class IngestionPipeline:
 
         logger.info(f"Creating embeddings for {len(chunks)} chunks...")
 
-        vectors = self.embedder.embed_batch(chunks)
+        dense_vectors = self.embedder.embed_batch(chunks)
+        sparse_vectors = self.sparse_embedder.embed_batch(chunks)
 
         payloads = []
 
@@ -90,6 +94,6 @@ class IngestionPipeline:
                 "text": chunk,
             })
 
-        self.vectorstore.upsert_vectors(vectors, payloads)
+        self.vectorstore.upsert_vectors(dense_vectors, sparse_vectors, payloads)
 
         logger.info("Upsert complete.")

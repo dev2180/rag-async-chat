@@ -22,6 +22,7 @@ try:
         OLLAMA_BASE_URL
     )
     from app.embedding.sentence_transformer_embedder import SentenceTransformerEmbedder
+    from app.embedding.sparse_embedder import SparseEmbedder
     from app.vectorstore.qdrant_client import QdrantVectorStore
     from app.rag.retriever import Retriever
     from app.llm.ollama_client import OllamaClient
@@ -88,13 +89,14 @@ def check_pdfs():
         print(f" - {pdf}")
 
 
-def run_ingestion(embedder, vectorstore):
+def run_ingestion(embedder, sparse_embedder, vectorstore):
     print("\n\033[95m🚀 Running ingestion pipeline...\033[0m")
 
     pdf_folder = Path(PDF_DIR)
     pipeline = IngestionPipeline(
         pdf_folder=pdf_folder,
         embedder=embedder,
+        sparse_embedder=sparse_embedder,
         vectorstore=vectorstore,
     )
     pipeline.run()
@@ -102,14 +104,14 @@ def run_ingestion(embedder, vectorstore):
     print("\033[92m✅ Ingestion completed.\033[0m\n")
 
 
-def start_chat(embedder, vectorstore):
+def start_chat(embedder, sparse_embedder, vectorstore):
     print("\n" + "="*40)
     print(" \033[96mStarting RAG CLI Chat Session...\033[0m")
     print(" Type '\033[91mexit\033[0m' or '\033[91mquit\033[0m' to end the session.")
     print("="*40 + "\n")
 
     session_id = str(uuid.uuid4())
-    retriever = Retriever(embedder=embedder, vectorstore=vectorstore)
+    retriever = Retriever(embedder=embedder, sparse_embedder=sparse_embedder, vectorstore=vectorstore)
     llm = OllamaClient()
     engine = RAGEngine(retriever=retriever, llm=llm)
 
@@ -155,10 +157,11 @@ def main():
     
     # Create shared instances
     embedder = SentenceTransformerEmbedder()
+    sparse_embedder = SparseEmbedder()
     vectorstore = QdrantVectorStore()
 
-    run_ingestion(embedder, vectorstore)
-    start_chat(embedder, vectorstore)
+    run_ingestion(embedder, sparse_embedder, vectorstore)
+    start_chat(embedder, sparse_embedder, vectorstore)
 
 
 if __name__ == "__main__":

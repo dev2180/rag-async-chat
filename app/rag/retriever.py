@@ -14,22 +14,32 @@ from app.embedding.base import BaseEmbedder
 from app.vectorstore.qdrant_client import QdrantVectorStore
 
 
+from app.embedding.sparse_embedder import SparseEmbedder
+
 class Retriever:
 
     def __init__(
         self,
         embedder: BaseEmbedder,
+        sparse_embedder: SparseEmbedder,
         vectorstore: QdrantVectorStore,
     ):
         self.embedder = embedder
+        self.sparse_embedder = sparse_embedder
         self.vectorstore = vectorstore
 
     def retrieve(self, query: str, top_k: int = 5) -> List[Dict]:
         """
-        Returns top_k most relevant payloads.
+        Returns top_k most relevant payloads using hybrid search.
         """
-        query_vector = self.embedder.embed_text(query)
-        results = self.vectorstore.search(query_vector, top_k=top_k)
+        query_dense = self.embedder.embed_text(query)
+        query_sparse = self.sparse_embedder.embed_text(query)
+        
+        results = self.vectorstore.search(
+            query_dense=query_dense, 
+            query_sparse=query_sparse, 
+            top_k=top_k
+        )
 
         payloads = []
 

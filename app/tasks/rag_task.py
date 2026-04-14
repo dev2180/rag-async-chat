@@ -40,13 +40,16 @@ class RAGJobPayload(BaseModel):
 
 def _get_engine() -> RAGEngine:
     """Lazy-initialize and cache the RAG engine components."""
-    global _embedder, _vectorstore, _retriever, _llm, _engine
+    global _embedder, _sparse_embedder, _vectorstore, _retriever, _llm, _engine
 
     if _engine is None:
         logger.info("Initializing RAG engine components (first job)...")
+        from app.embedding.sparse_embedder import SparseEmbedder
+        
         _embedder = SentenceTransformerEmbedder()
+        _sparse_embedder = SparseEmbedder()
         _vectorstore = QdrantVectorStore(collection_name=QDRANT_COLLECTION)
-        _retriever = Retriever(_embedder, _vectorstore)
+        _retriever = Retriever(_embedder, _sparse_embedder, _vectorstore)
         _llm = OllamaClient(model=OLLAMA_MODEL)
         _engine = RAGEngine(_retriever, _llm)
         logger.info("RAG engine ready.")

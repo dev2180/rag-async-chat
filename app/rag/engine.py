@@ -17,6 +17,7 @@ from app.chat.memory import ChatMemory
 from app.utils.latency import LatencyTracker, QueryMetrics
 from app.rag.evaluator import RetrievalMetrics, evaluate_retrieval
 from app.rag.citations import Citation, build_citations
+from app.rag.query_optimizer import QueryOptimizer
 from typing import List
 from dataclasses import dataclass
 
@@ -36,6 +37,7 @@ class RAGEngine:
     ):
         self.retriever = retriever
         self.llm = llm
+        self.optimizer = QueryOptimizer(llm)
 
     def answer(self, query: str, session_id: str, top_k: int = 5) -> AnswerResult:
 
@@ -43,8 +45,10 @@ class RAGEngine:
         memory = ChatMemory(session_id=session_id)
         history = memory.get_history()
 
+        optimized_query = self.optimizer.optimize(query, history)
+
         with LatencyTracker("Retrieval").measure() as t:
-            payloads = self.retriever.retrieve(query, top_k=top_k)
+            payloads = self.retriever.retrieve(optimized_query, top_k=top_k)
         metrics.retrieval_ms = t.duration_ms
         eval_metrics = evaluate_retrieval(payloads)
         citations = build_citations(payloads)

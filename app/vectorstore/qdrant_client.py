@@ -12,7 +12,7 @@ Must NOT:
 import logging
 from typing import List, Optional
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, VectorParams, PointStruct, SparseVectorParams, SparseVector, Prefetch, FusionQuery, Fusion
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 from uuid import uuid4
@@ -35,38 +35,50 @@ class QdrantVectorStore:
 
     def create_collection(self, vector_dimension: int):
         """
-        Create collection if it does not exist.
+        Create collection with dual vectors (dense and sparse) if it does not exist.
         """
         existing = [c.name for c in self.client.get_collections().collections]
 
         if self.collection_name not in existing:
             self.client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config=VectorParams(
-                    size=vector_dimension,
-                    distance=Distance.COSINE,
-                ),
+                vectors_config={
+                    "dense": VectorParams(
+                        size=vector_dimension,
+                        distance=Distance.COSINE,
+                    )
+                },
+                sparse_vectors_config={
+                    "sparse": SparseVectorParams()
+                }
             )
-            logger.info(f"Created collection '{self.collection_name}' (dim={vector_dimension})")
+            logger.info(f"Created hybrid collection '{self.collection_name}' (dim={vector_dimension})")
         else:
             logger.info(f"Collection '{self.collection_name}' already exists")
 
     def upsert_vectors(
         self,
-        vectors: List[List[float]],
+        dense_vectors: List[List[float]],
+        sparse_vectors: List[tuple],
         payloads: Optional[List[dict]] = None,
     ):
         """
-        Insert vectors into Qdrant.
+        Insert hybrid vectors into Qdrant.
+        sparse_vectors should be list of (indices, values)
         """
         points = []
 
-        for idx, vector in enumerate(vectors):
+        for idx, d_vec in enumerate(dense_vectors):
             payload = payloads[idx] if payloads else {}
+            s_indices, s_values = sparse_vectors[idx]
+            
             points.append(
                 PointStruct(
                     id=str(uuid4()),
-                    vector=vector,
+                    vector={
+                        "dense": d_vec,
+                        "sparse": SparseVector(indices=s_indices, values=s_values)
+                    },
                     payload=payload,
                 )
             )
@@ -75,22 +87,30 @@ class QdrantVectorStore:
             collection_name=self.collection_name,
             points=points,
         )
-        logger.info(f"Upserted {len(points)} vectors")
+        logger.info(f"Upserted {len(points)} hybrid vectors")
 
     def search(
         self,
-        query_vector: List[float],
+        query_dense: List[float],
+        query_sparse: tuple,
         top_k: int = 5,
-        ):
-            """
-            Perform similarity search.
-            """
-            results = self.client.query_points(
-                collection_name=self.collection_name,
-                query=query_vector,
-                limit=top_k,
-            )
-            return results.points
+    ):
+        """
+        Perform hybrid similarity search using Reciprocal Rank Fusion (RRF).
+        """
+        s_indices, s_values = query_sparse
+        sparse_vec = SparseVector(indices=s_indices, values=s_values)
+
+        results = self.client.query_points(
+            collection_name=self.collection_name,
+            prefetch=[
+                Prefetch(query=query_dense, using="dense", limit=top_k),
+                Prefetch(query=sparse_vec, using="sparse", limit=top_k),
+            ],
+            query=FusionQuery(fusion=Fusion.RRF),
+            limit=top_k,
+        )
+        return results.points
 
     def collection_exists(self) -> bool:
         existing = [c.name for c in self.client.get_collections().collections]
