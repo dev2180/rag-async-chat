@@ -127,8 +127,9 @@ def start_chat(embedder, vectorstore):
             break
 
         try:
-            answer = engine.answer(question, session_id=session_id)
-            print(f"\n\033[96mAssistant >\033[0m {answer}\n")
+            result = engine.answer(question, session_id=session_id)
+            print(f"\n\033[96mAssistant >\033[0m {result.answer}\n")
+            print(f"⏱️  Retrieval: {result.metrics.retrieval_ms:.0f}ms | LLM: {result.metrics.llm_ms:.1f}ms | Total: {result.metrics.total_ms:.1f}ms")
             print("-" * 40)
         except ConnectionError as e:
             print(f"\n\033[91m❌ Connection error: {e}\033[0m\n")
