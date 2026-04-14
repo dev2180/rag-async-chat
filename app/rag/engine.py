@@ -45,7 +45,9 @@ class RAGEngine:
         memory = ChatMemory(session_id=session_id)
         history = memory.get_history()
 
-        optimized_query = self.optimizer.optimize(query, history)
+        with LatencyTracker("Query Optimization").measure() as t:
+            optimized_query = self.optimizer.optimize(query, history)
+        metrics.query_rewrite_ms = t.duration_ms
 
         with LatencyTracker("Retrieval").measure() as t:
             payloads = self.retriever.retrieve(optimized_query, top_k=top_k)
@@ -60,7 +62,7 @@ class RAGEngine:
             response = self.llm.generate(prompt)
         metrics.llm_ms = t.duration_ms
 
-        metrics.total_ms = metrics.retrieval_ms + metrics.llm_ms
+        metrics.total_ms = metrics.query_rewrite_ms + metrics.retrieval_ms + metrics.llm_ms
 
         # Save conversation
         memory.add_message("user", query)

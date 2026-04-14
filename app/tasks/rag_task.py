@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # Module-level singletons — persist across jobs within the same worker process
 # Avoids reloading the ~90MB SentenceTransformer model on every request
 _embedder = None
+_sparse_embedder = None
 _vectorstore = None
 _retriever = None
 _llm = None
