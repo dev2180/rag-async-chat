@@ -35,6 +35,8 @@ class Retriever:
 
         for r in results:
             if r.payload:
-                payloads.append(r.payload)
+                payload = dict(r.payload)
+                payload["score"] = r.score
+                payloads.append(payload)
 
         return payloads

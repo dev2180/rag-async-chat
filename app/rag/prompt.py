@@ -22,6 +22,7 @@ Instructions:
 - Synthesize the answer in clear natural language.
 - Do NOT copy sentences verbatim from the context.
 - Summarize the relevant information.
+- When possible, mention which source document supports your answer (e.g. "[filename.pdf]").
 - You may infer conclusions logically from the provided context.
 - Do NOT invent facts not supported by context.
 - If not found, say exactly:

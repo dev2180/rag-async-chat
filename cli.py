@@ -127,8 +127,12 @@ def start_chat(embedder, vectorstore):
             break
 
         try:
-            answer = engine.answer(question, session_id=session_id)
-            print(f"\n\033[96mAssistant >\033[0m {answer}\n")
+            from app.rag.citations import format_citations_cli
+            result = engine.answer(question, session_id=session_id)
+            print(f"\n\033[96mAssistant >\033[0m {result.answer}\n")
+            print(format_citations_cli(result.citations))
+            print(f"📊 Retrieval: {result.metrics.retrieval_ms:.0f}ms | top={result.eval.top_score:.2f} avg={result.eval.avg_score:.2f} coverage={result.eval.coverage*100:.0f}% | {len(result.eval.source_docs)} sources")
+            print(f"⏱️  LLM: {result.metrics.llm_ms:.1f}ms | Total: {result.metrics.total_ms:.1f}ms")
             print("-" * 40)
         except ConnectionError as e:
             print(f"\n\033[91m❌ Connection error: {e}\033[0m\n")

@@ -14,7 +14,18 @@ from app.rag.retriever import Retriever
 from app.rag.prompt import build_prompt
 from app.llm.base import BaseLLM
 from app.chat.memory import ChatMemory
+from app.utils.latency import LatencyTracker, QueryMetrics
+from app.rag.evaluator import RetrievalMetrics, evaluate_retrieval
+from app.rag.citations import Citation, build_citations
+from typing import List
+from dataclasses import dataclass
 
+@dataclass
+class AnswerResult:
+    answer: str
+    metrics: QueryMetrics
+    eval: RetrievalMetrics
+    citations: List[Citation]
 
 class RAGEngine:
 
@@ -26,25 +37,34 @@ class RAGEngine:
         self.retriever = retriever
         self.llm = llm
 
-    def answer(self, query: str, session_id: str, top_k: int = 5) -> str:
+    def answer(self, query: str, session_id: str, top_k: int = 5) -> AnswerResult:
 
+        metrics = QueryMetrics()
         memory = ChatMemory(session_id=session_id)
-
         history = memory.get_history()
 
-        payloads = self.retriever.retrieve(query, top_k=top_k)
+        with LatencyTracker("Retrieval") as t:
+            payloads = self.retriever.retrieve(query, top_k=top_k)
+        metrics.retrieval_ms = t.duration_ms
+
+        eval_metrics = evaluate_retrieval(payloads)
+        citations = build_citations(payloads)
 
         context_chunks = [p.get("text", "") for p in payloads]
-
         prompt = build_prompt(query, context_chunks, history)
 
-        response = self.llm.generate(prompt)
+        with LatencyTracker("LLM Generation") as t:
+            response = self.llm.generate(prompt)
+        metrics.llm_ms = t.duration_ms
+
+        metrics.total_ms = metrics.retrieval_ms + metrics.llm_ms
 
         # Save conversation
         memory.add_message("user", query)
         memory.add_message("assistant", response)
 
-        return response
+        return AnswerResult(answer=response, metrics=metrics, eval=eval_metrics, citations=citations)
+
     def stream_answer(self, query: str, session_id: str, top_k: int = 5):
 
         memory = ChatMemory(session_id=session_id)
