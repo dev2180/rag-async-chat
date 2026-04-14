@@ -63,7 +63,8 @@ def rag_chat_task(payload_dict: dict) -> str:
 
     logger.info(f"Processing query for session {payload.session_id}")
 
-    return engine.answer(
+    result = engine.answer(
         query=payload.query,
         session_id=payload.session_id
     )
+    return result.answer
