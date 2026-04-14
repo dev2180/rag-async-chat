@@ -144,9 +144,7 @@ def start_chat(embedder, vectorstore):
 
 
 def main():
-    setup_logging()
-    # To reduce spammy logs in the clean CLI mode
-    logging.getLogger().setLevel(logging.WARNING)
+    setup_logging(console_level="WARNING")
 
     print("\n\033[1m\033[95m==== LOCAL ASYNC RAG CLI ====\033[0m")
 

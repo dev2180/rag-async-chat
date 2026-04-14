@@ -46,7 +46,6 @@ class RAGEngine:
         with LatencyTracker("Retrieval") as t:
             payloads = self.retriever.retrieve(query, top_k=top_k)
         metrics.retrieval_ms = t.duration_ms
-
         eval_metrics = evaluate_retrieval(payloads)
         citations = build_citations(payloads)
 
@@ -64,7 +63,6 @@ class RAGEngine:
         memory.add_message("assistant", response)
 
         return AnswerResult(answer=response, metrics=metrics, eval=eval_metrics, citations=citations)
-
     def stream_answer(self, query: str, session_id: str, top_k: int = 5):
 
         memory = ChatMemory(session_id=session_id)
