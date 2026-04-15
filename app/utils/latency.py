@@ -15,6 +15,7 @@ class QueryMetrics:
     query_rewrite_ms: float = 0.0
     embedding_ms: float = 0.0
     retrieval_ms: float = 0.0
+    rerank_ms: float = 0.0
     compress_ms: float = 0.0
     llm_ms: float = 0.0
     total_ms: float = 0.0

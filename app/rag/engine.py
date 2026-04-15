@@ -19,6 +19,7 @@ from app.rag.evaluator import RetrievalMetrics, evaluate_retrieval
 from app.rag.citations import Citation, build_citations
 from app.rag.query_optimizer import QueryOptimizer
 from app.rag.compressor import compress_context
+from app.rag.reranker import CrossEncoderReranker
 from typing import List
 from dataclasses import dataclass
 
@@ -35,10 +36,12 @@ class RAGEngine:
         self,
         retriever: Retriever,
         llm: BaseLLM,
+        reranker: CrossEncoderReranker = None,
     ):
         self.retriever = retriever
         self.llm = llm
         self.optimizer = QueryOptimizer(llm)
+        self.reranker = reranker
 
     def answer(self, query: str, session_id: str, top_k: int = 5) -> AnswerResult:
 
@@ -67,6 +70,13 @@ class RAGEngine:
         # We might have up to top_k * 3 chunks now. Let's keep the best ones before eval.
         payloads = payloads[:top_k * 2] 
         
+        if self.reranker:
+            with LatencyTracker("Reranking").measure() as t:
+                payloads = self.reranker.rerank(query, payloads, top_k=top_k)
+            metrics.rerank_ms = t.duration_ms
+        else:
+            payloads = payloads[:top_k]
+        
         metrics.retrieval_ms = t.duration_ms
         eval_metrics = evaluate_retrieval(payloads)
         citations = build_citations(payloads)
@@ -84,7 +94,7 @@ class RAGEngine:
             response = self.llm.generate(prompt)
         metrics.llm_ms = t.duration_ms
 
-        metrics.total_ms = metrics.query_rewrite_ms + metrics.retrieval_ms + metrics.compress_ms + metrics.llm_ms
+        metrics.total_ms = metrics.query_rewrite_ms + metrics.retrieval_ms + metrics.rerank_ms + metrics.compress_ms + metrics.llm_ms
 
         # Save conversation
         memory.add_message("user", query)

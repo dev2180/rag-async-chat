@@ -27,6 +27,7 @@ _embedder = None
 _sparse_embedder = None
 _vectorstore = None
 _retriever = None
+_reranker = None
 _llm = None
 _engine = None
 
@@ -46,13 +47,15 @@ def _get_engine() -> RAGEngine:
     if _engine is None:
         logger.info("Initializing RAG engine components (first job)...")
         from app.embedding.sparse_embedder import SparseEmbedder
+        from app.rag.reranker import CrossEncoderReranker
         
         _embedder = SentenceTransformerEmbedder()
         _sparse_embedder = SparseEmbedder()
         _vectorstore = QdrantVectorStore(collection_name=QDRANT_COLLECTION)
         _retriever = Retriever(_embedder, _sparse_embedder, _vectorstore)
+        _reranker = CrossEncoderReranker()
         _llm = OllamaClient(model=OLLAMA_MODEL)
-        _engine = RAGEngine(_retriever, _llm)
+        _engine = RAGEngine(_retriever, _llm, _reranker)
         logger.info("RAG engine ready.")
 
     return _engine

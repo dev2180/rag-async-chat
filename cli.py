@@ -25,6 +25,7 @@ try:
     from app.embedding.sparse_embedder import SparseEmbedder
     from app.vectorstore.qdrant_client import QdrantVectorStore
     from app.rag.retriever import Retriever
+    from app.rag.reranker import CrossEncoderReranker
     from app.llm.ollama_client import OllamaClient
     from app.rag.engine import RAGEngine
     from app.ingestion.pipeline import IngestionPipeline
@@ -104,7 +105,7 @@ def run_ingestion(embedder, sparse_embedder, vectorstore):
     print("\033[92m✅ Ingestion completed.\033[0m\n")
 
 
-def start_chat(embedder, sparse_embedder, vectorstore):
+def start_chat(embedder, sparse_embedder, vectorstore, reranker):
     print("\n" + "="*40)
     print(" \033[96mStarting RAG CLI Chat Session...\033[0m")
     print(" Type '\033[91mexit\033[0m' or '\033[91mquit\033[0m' to end the session.")
@@ -113,7 +114,7 @@ def start_chat(embedder, sparse_embedder, vectorstore):
     session_id = str(uuid.uuid4())
     retriever = Retriever(embedder=embedder, sparse_embedder=sparse_embedder, vectorstore=vectorstore)
     llm = OllamaClient()
-    engine = RAGEngine(retriever=retriever, llm=llm)
+    engine = RAGEngine(retriever=retriever, llm=llm, reranker=reranker)
 
     while True:
         try:
@@ -133,7 +134,7 @@ def start_chat(embedder, sparse_embedder, vectorstore):
             result = engine.answer(question, session_id=session_id)
             print(f"\n\033[96mAssistant >\033[0m {result.answer}\n")
             print(format_citations_cli(result.citations))
-            print(f"📊 Retrieval: {result.metrics.retrieval_ms:.0f}ms | top={result.eval.top_score:.2f} avg={result.eval.avg_score:.2f} coverage={result.eval.coverage*100:.0f}% | {len(result.eval.source_docs)} sources")
+            print(f"📊 Retrieval: {result.metrics.retrieval_ms:.0f}ms | Rerank: {result.metrics.rerank_ms:.0f}ms | top={result.eval.top_score:.2f} avg={result.eval.avg_score:.2f} coverage={result.eval.coverage*100:.0f}% | {len(result.eval.source_docs)} sources")
             print(f"⏱️  Rewrite: {result.metrics.query_rewrite_ms:.0f}ms | LLM: {result.metrics.llm_ms:.1f}ms | Total: {result.metrics.total_ms:.1f}ms")
             print("-" * 40)
         except ConnectionError as e:
@@ -159,9 +160,10 @@ def main():
     embedder = SentenceTransformerEmbedder()
     sparse_embedder = SparseEmbedder()
     vectorstore = QdrantVectorStore()
+    reranker = CrossEncoderReranker()
 
     run_ingestion(embedder, sparse_embedder, vectorstore)
-    start_chat(embedder, sparse_embedder, vectorstore)
+    start_chat(embedder, sparse_embedder, vectorstore, reranker)
 
 
 if __name__ == "__main__":
