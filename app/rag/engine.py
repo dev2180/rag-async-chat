@@ -20,6 +20,7 @@ from app.rag.citations import Citation, build_citations
 from app.rag.query_optimizer import QueryOptimizer
 from app.rag.compressor import compress_context
 from app.rag.reranker import CrossEncoderReranker
+from app.utils.trace import TraceLogger
 from typing import List
 from dataclasses import dataclass
 
@@ -44,6 +45,7 @@ class RAGEngine:
         self.reranker = reranker
 
     def answer(self, query: str, session_id: str, top_k: int = 5) -> AnswerResult:
+        tracer = TraceLogger(query)
 
         metrics = QueryMetrics()
         memory = ChatMemory(session_id=session_id)
@@ -52,6 +54,7 @@ class RAGEngine:
         with LatencyTracker("Query Optimization").measure() as t:
             optimized_queries = self.optimizer.optimize(query, history)
         metrics.query_rewrite_ms = t.duration_ms
+        tracer.add_step("Query Expansion", f"Generated variants:\n- " + "\n- ".join(optimized_queries))
 
         payloads = []
         seen_texts = set()
@@ -69,11 +72,15 @@ class RAGEngine:
         payloads.sort(key=lambda x: x.get("score", 0.0), reverse=True)
         # We might have up to top_k * 3 chunks now. Let's keep the best ones before eval.
         payloads = payloads[:top_k * 2] 
+        tracer.add_step("Multi-Query Retrieval", f"Pooled {len(payloads)} unique candidate chunks from vector store.") 
         
         if self.reranker:
             with LatencyTracker("Reranking").measure() as t:
                 payloads = self.reranker.rerank(query, payloads, top_k=top_k)
             metrics.rerank_ms = t.duration_ms
+            
+            rerank_details = "\n".join([f"Score: {p.get('score', 0):.2f} | Chunk {p.get('id', '?')} -> {p.get('text', '')[:100]}..." for p in payloads])
+            tracer.add_step("CrossEncoder Reranking", rerank_details)
         else:
             payloads = payloads[:top_k]
         
@@ -86,6 +93,9 @@ class RAGEngine:
             combined_queries = " ".join(optimized_queries)
             compressed = compress_context(payloads, combined_queries)
         metrics.compress_ms = t.duration_ms
+        
+        dropped = len(payloads) - len(compressed)
+        tracer.add_step("Context Compression", f"Dropped {dropped} chunks due to low keyword/score overlap. Remaining: {len(compressed)}")
 
         context_chunks = [p.get("text", "") for p in compressed]
         prompt = build_prompt(query, context_chunks, history)
@@ -99,6 +109,9 @@ class RAGEngine:
         # Save conversation
         memory.add_message("user", query)
         memory.add_message("assistant", response)
+
+        tracer.add_step("LLM Generation", f"Final Response:\n{response}")
+        tracer.save()
 
         return AnswerResult(answer=response, metrics=metrics, eval=eval_metrics, citations=citations)
     def stream_answer(self, query: str, session_id: str, top_k: int = 5):
