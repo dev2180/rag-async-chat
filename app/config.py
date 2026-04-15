@@ -76,3 +76,18 @@ def setup_logging(console_level=None):
     console_handler.setLevel(getattr(logging, target_console_level.upper(), logging.INFO))
     console_handler.setFormatter(console_fmt)
     root_logger.addHandler(console_handler)
+
+    # 3. Mute noisy third-party loggers
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+    os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+    
+    # Silence basic loggers
+    for ext_logger in ["sentence_transformers", "transformers", "huggingface_hub", "urllib3", "httpx"]:
+        logging.getLogger(ext_logger).setLevel(logging.ERROR)
+        
+    try:
+        import transformers
+        transformers.logging.set_verbosity_error()
+    except ImportError:
+        pass
