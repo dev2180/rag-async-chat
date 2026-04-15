@@ -18,6 +18,7 @@ from app.utils.latency import LatencyTracker, QueryMetrics
 from app.rag.evaluator import RetrievalMetrics, evaluate_retrieval
 from app.rag.citations import Citation, build_citations
 from app.rag.query_optimizer import QueryOptimizer
+from app.rag.compressor import compress_context
 from typing import List
 from dataclasses import dataclass
 
@@ -46,23 +47,44 @@ class RAGEngine:
         history = memory.get_history()
 
         with LatencyTracker("Query Optimization").measure() as t:
-            optimized_query = self.optimizer.optimize(query, history)
+            optimized_queries = self.optimizer.optimize(query, history)
         metrics.query_rewrite_ms = t.duration_ms
 
+        payloads = []
+        seen_texts = set()
         with LatencyTracker("Retrieval").measure() as t:
-            payloads = self.retriever.retrieve(optimized_query, top_k=top_k)
+            for q in optimized_queries:
+                # Retrieve for each query variation
+                results = self.retriever.retrieve(q, top_k=top_k)
+                for r in results:
+                    text = r.get("text", "")
+                    if text not in seen_texts:
+                        seen_texts.add(text)
+                        payloads.append(r)
+        
+        # Sort payloads by score descending
+        payloads.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+        # We might have up to top_k * 3 chunks now. Let's keep the best ones before eval.
+        payloads = payloads[:top_k * 2] 
+        
         metrics.retrieval_ms = t.duration_ms
         eval_metrics = evaluate_retrieval(payloads)
         citations = build_citations(payloads)
 
-        context_chunks = [p.get("text", "") for p in payloads]
+        with LatencyTracker("Compression").measure() as t:
+            # Combine queries for keyword extraction
+            combined_queries = " ".join(optimized_queries)
+            compressed = compress_context(payloads, combined_queries)
+        metrics.compress_ms = t.duration_ms
+
+        context_chunks = [p.get("text", "") for p in compressed]
         prompt = build_prompt(query, context_chunks, history)
 
         with LatencyTracker("LLM Generation").measure() as t:
             response = self.llm.generate(prompt)
         metrics.llm_ms = t.duration_ms
 
-        metrics.total_ms = metrics.query_rewrite_ms + metrics.retrieval_ms + metrics.llm_ms
+        metrics.total_ms = metrics.query_rewrite_ms + metrics.retrieval_ms + metrics.compress_ms + metrics.llm_ms
 
         # Save conversation
         memory.add_message("user", query)
