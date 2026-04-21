@@ -1,88 +1,87 @@
+"""
+Tests for the adaptive chunker (ingestion-level integration tests).
+These tests use the CURRENT API: chunk_text(text, chunk_size, overlap_sentences).
+
+NOTE: The old naive `overlap=N` character-slicer parameter no longer exists.
+The chunker now uses NLTK sentence-boundary aware splitting with sentence-level overlap.
+"""
 import pytest
 from app.ingestion.chunker import chunk_text
 
 
-def test_basic_chunking():
-    text = "a" * 1000
-    chunks = chunk_text(text, chunk_size=400, overlap=80)
+def test_basic_chunking_returns_multiple_chunks():
+    """Long text should be split into multiple chunks."""
+    # Create text with many sentences to force chunking
+    text = "This is sentence number {i}. " * 30
+    text = "".join(f"This is sentence number {i}. " for i in range(30))
+    chunks = chunk_text(text, chunk_size=100, overlap_sentences=0)
     assert len(chunks) > 1
-    # First chunk should be exactly chunk_size
-    assert len(chunks[0]) == 400
 
 
-def test_overlap_exists():
-    """Verify overlapping content between consecutive chunks."""
-    text = "abcdefghij" * 100  # 1000 chars, known pattern
-    chunks = chunk_text(text, chunk_size=400, overlap=80)
-    # Last 80 chars of chunk[0] should equal first 80 chars of chunk[1]
-    assert chunks[0][-80:] == chunks[1][:80]
-
-
-def test_short_text():
-    """Text shorter than chunk_size should produce one chunk."""
-    text = "Hello world"
-    chunks = chunk_text(text, chunk_size=400, overlap=80)
+def test_short_text_produces_one_chunk():
+    """Text shorter than chunk_size should produce exactly one chunk."""
+    text = "Hello world. This is a short sentence."
+    chunks = chunk_text(text, chunk_size=500, overlap_sentences=0)
     assert len(chunks) == 1
-    assert chunks[0] == "Hello world"
+    assert "Hello world" in chunks[0]
 
 
 def test_empty_text():
-    text = ""
-    chunks = chunk_text(text, chunk_size=400, overlap=80)
-    assert len(chunks) == 0
+    """Empty or whitespace-only text should produce no chunks."""
+    assert chunk_text("") == []
+    assert chunk_text("   ") == []
+    assert chunk_text(None) == []
 
 
-def test_exact_chunk_size():
-    """Exactly chunk_size chars produces 2 chunks due to overlap window."""
-    text = "x" * 400
-    chunks = chunk_text(text, chunk_size=400, overlap=80)
-    # step=320, positions: 0 (400 chars), 320 (80 chars)
-    assert len(chunks) == 2
-    assert chunks[0] == text
+def test_overlap_carries_sentences():
+    """With overlap_sentences=1, the last sentence of chunk N appears at start of chunk N+1."""
+    text = "Alpha. Bravo. Charlie. Delta. Echo. Foxtrot. Golf. Hotel."
+    chunks = chunk_text(text, chunk_size=40, overlap_sentences=1)
+
+    if len(chunks) > 1:
+        prev_sentences = chunks[0].split(". ")
+        next_sentences = chunks[1].split(". ")
+        last_of_prev = prev_sentences[-1].rstrip(".")
+        first_of_next = next_sentences[0].rstrip(".")
+        assert last_of_prev == first_of_next
 
 
-def test_chunk_size_plus_one():
-    text = "x" * 401
-    chunks = chunk_text(text, chunk_size=400, overlap=80)
-    assert len(chunks) == 2
-    assert len(chunks[0]) == 400
+def test_no_overlap_no_duplicates():
+    """With overlap_sentences=0, consecutive chunks share no sentences."""
+    text = "Alpha. Bravo. Charlie. Delta. Echo."
+    chunks = chunk_text(text, chunk_size=30, overlap_sentences=0)
+
+    for i in range(len(chunks) - 1):
+        prev_set = set(s.strip().rstrip(".") for s in chunks[i].split(". ") if s.strip())
+        next_set = set(s.strip().rstrip(".") for s in chunks[i + 1].split(". ") if s.strip())
+        overlap = prev_set & next_set - {""}
+        assert len(overlap) == 0, f"Unexpected duplicate sentences between chunk {i} and {i+1}: {overlap}"
 
 
-def test_custom_params():
-    text = "abcdefghij" * 10  # 100 chars
-    chunks = chunk_text(text, chunk_size=30, overlap=10)
-    # Step = 30 - 10 = 20, so positions: 0, 20, 40, 60, 80
-    assert len(chunks) == 5
+def test_code_block_preserved():
+    """Fenced code blocks must not be split across chunks."""
+    text = """Intro text about the API.
+
+```python
+def hello():
+    print("Hello World")
+    return True
+```
+
+Follow-up explanation here."""
+
+    chunks = chunk_text(text, chunk_size=100, overlap_sentences=0)
+    code_chunks = [c for c in chunks if "def hello():" in c]
+    assert len(code_chunks) >= 1
+    for c in code_chunks:
+        assert "```python" in c
+        assert c.count("```") == 2
 
 
-def test_no_overlap():
-    text = "x" * 100
-    chunks = chunk_text(text, chunk_size=25, overlap=0)
-    assert len(chunks) == 4
-    for chunk in chunks:
-        assert len(chunk) == 25
-
-
-def test_all_text_covered():
-    """Every character in the original text appears in at least one chunk."""
-    text = "abcdefghijklmnopqrstuvwxyz" * 5  # 130 chars
-    chunks = chunk_text(text, chunk_size=40, overlap=10)
-    step = 40 - 10  # 30
-
-    # Reconstruct all covered indices
-    covered = set()
-    for i, chunk in enumerate(chunks):
-        start = i * step
-        for j in range(len(chunk)):
-            covered.add(start + j)
-
-    # Every index from 0 to len(text)-1 should be covered
-    for idx in range(len(text)):
-        assert idx in covered, f"Index {idx} not covered by any chunk"
-
-
-def test_single_char():
-    text = "a"
-    chunks = chunk_text(text, chunk_size=400, overlap=80)
-    assert len(chunks) == 1
-    assert chunks[0] == "a"
+def test_single_long_sentence_becomes_own_chunk():
+    """A single sentence longer than chunk_size should not crash."""
+    long_sentence = "word " * 200  # ~1000 chars
+    chunks = chunk_text(long_sentence, chunk_size=100, overlap_sentences=0)
+    assert len(chunks) >= 1
+    long_chunks = [c for c in chunks if len(c) > 100]
+    assert len(long_chunks) >= 1

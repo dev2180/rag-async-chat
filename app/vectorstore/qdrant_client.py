@@ -33,11 +33,16 @@ class QdrantVectorStore:
         self.client = QdrantClient(host=host, port=port)
         logger.info(f"QdrantVectorStore connected: {host}:{port}, collection={collection_name}")
 
-    def create_collection(self, vector_dimension: int):
+    def create_collection(self, vector_dimension: int, recreate: bool = False):
         """
         Create collection with dual vectors (dense and sparse) if it does not exist.
         """
         existing = [c.name for c in self.client.get_collections().collections]
+
+        if recreate and self.collection_name in existing:
+            self.client.delete_collection(self.collection_name)
+            existing.remove(self.collection_name)
+            logger.info(f"Deleted existing collection '{self.collection_name}' for recreation")
 
         if self.collection_name not in existing:
             self.client.create_collection(

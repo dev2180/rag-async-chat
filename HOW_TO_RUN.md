@@ -1,259 +1,289 @@
-📘 RAG Chat Application — Setup & Run Guide
-1️⃣ System Requirements
-Required Software
+# 📘 RAG Chat Application — Setup & Run Guide
 
-Python 3.10+
+## 1️⃣ System Requirements
 
-Docker Desktop
+| Requirement | Notes |
+|---|---|
+| Python 3.10+ | Required for `list[str]` type hints syntax |
+| Docker Desktop | For running Qdrant and Valkey containers |
+| Ollama | Local installation — run natively on your machine |
+| Git | Optional, for cloning |
 
-Ollama (local installation)
+---
 
-Git (optional but recommended)
+## 2️⃣ Required Services
 
-2️⃣ Required Services
+This system depends on three external services:
 
-This system depends on:
+| Service | Purpose | Port |
+|---|---|---|
+| **Valkey** (Redis) | Job queue + Chat memory | 6379 |
+| **Qdrant** | Vector database (hybrid dense+sparse) | 6333 |
+| **Ollama** | Local LLM inference | 11434 |
 
-Service	Purpose
-Valkey (Redis)	Queue + Chat Memory
-Qdrant	Vector Database
-Ollama (Local)	LLM Inference
-3️⃣ Installation Steps
-🔹 Step 1 — Clone Project
+---
+
+## 3️⃣ Installation Steps
+
+### Step 1 — Clone the project
+```bash
 git clone <your-repo-url>
 cd rag-app
+```
+Or just unzip the project folder.
 
-
-Or just unzip project folder.
-
-🔹 Step 2 — Create Virtual Environment
+### Step 2 — Create a virtual environment
+```bash
 python -m venv venv
+```
 
+**Activate it:**
 
-Activate:
+- **Windows:**
+  ```bash
+  venv\Scripts\activate
+  ```
+- **Mac/Linux:**
+  ```bash
+  source venv/bin/activate
+  ```
 
-Windows:
-
-venv\Scripts\activate
-
-
-Mac/Linux:
-
-source venv/bin/activate
-
-🔹 Step 3 — Install Dependencies
+### Step 3 — Install dependencies
+```bash
 pip install -r requirements.txt
+```
 
-4️⃣ Start Required Services
-🔹 Start Qdrant (Vector DB)
-docker run -d ^
-  --name rag-vector-db ^
-  -p 6333:6333 ^
-  qdrant/qdrant
+---
 
+## 4️⃣ Start Required Services
 
+### Start Qdrant (Vector DB)
+```bash
+docker run -d --name rag-vector-db -p 6333:6333 qdrant/qdrant
+```
+Verify it's running: open [http://localhost:6333](http://localhost:6333) in your browser.
+
+### Start Valkey (Redis)
+```bash
+docker run -d --name valkey -p 6379:6379 valkey/valkey
+```
 Verify:
-
-http://localhost:6333
-
-🔹 Start Valkey (Redis)
-docker run -d ^
-  --name valkey ^
-  -p 6379:6379 ^
-  valkey/valkey
-
-
-Verify:
-
+```bash
 docker ps
+```
+You should see both containers listed and running.
 
+### Ensure Ollama is running
+Install Ollama from: [https://ollama.com](https://ollama.com)
 
-You should see both containers running.
+Pull the required model:
+```bash
+ollama pull llama3.2:latest
+```
 
-🔹 Ensure Ollama Is Running
-
-Install Ollama from:
-
-https://ollama.com
-
-Check version:
-
-ollama --version
-
-
-Pull required model:
-
-ollama pull qwen2.5:7b-instruct
-
-
-Check available models:
-
+Check it's available:
+```bash
 ollama list
+```
 
-
-Verify API:
-
+Verify the API is responding:
+```bash
 curl http://localhost:11434/api/tags
+```
 
-5️⃣ Ingest PDFs Into Vector Database
+> [!NOTE]
+> The default model is `llama3.2:latest`. You can override it by setting the `OLLAMA_MODEL` environment variable before running.
 
-Place PDF files into:
+---
 
+## 5️⃣ Add PDFs
+
+Place your PDF files in:
+```
 data/pdfs/
+```
 
+---
 
-Run ingestion:
+## 6️⃣ Run the CLI (Recommended for Dev/Testing)
 
-python run_ingestion.py
+The CLI automatically runs ingestion then starts an interactive chat session:
 
+```bash
+python cli.py
+```
 
-You should see:
+This will:
+1. Check all required services (Valkey, Qdrant, Ollama)
+2. Load AI models (dense embedder + sparse BM25 + cross-encoder reranker)
+3. Run the ingestion pipeline (hash check → chunk → embed → upsert)
+4. Start an interactive Q&A session with live latency metrics and citations
 
-[INFO] Creating embeddings...
-[INFO] Upsert complete.
+**Example session:**
+```
+You > What is Node.js?
+Assistant > Node.js is a JavaScript runtime environment...
 
-6️⃣ Start Worker (Windows Compatible)
+📎 Sources:
+  [1] nodejs.pdf (chunk 3, relevance: 0.91) — "Node.js is a runtime environment..."
 
-⚠ On Windows, use SimpleWorker:
+📊 Retrieval: 312ms | Rerank: 124ms | top=0.91 avg=0.72 coverage=100% | 1 sources
+⏱️  Rewrite: 843ms | LLM: 2310.1ms | Total: 3600.1ms
+```
 
+Type `exit` or `quit` to end the session.
+
+---
+
+## 7️⃣ Run in API Mode (Production)
+
+### Step 1 — Start the RQ Worker
+
+> [!IMPORTANT]
+> On **Windows**, the standard RQ worker uses `SimpleWorker` automatically (fork() is not available). The `worker.py` script handles this detection for you.
+
+```bash
+python -m app.workers.worker
+```
+
+Or using the RQ command directly (Windows compatible):
+```bash
 rq worker rag --worker-class rq.worker.SimpleWorker
-
+```
 
 You should see:
-
+```
 *** Listening on rag...
-
-
+```
 Leave this terminal running.
 
-7️⃣ Start FastAPI Server
+### Step 2 — Start the FastAPI Server
 
-In another terminal:
-
+In a new terminal:
+```bash
 uvicorn main:app --reload
-
+```
 
 You should see:
-
+```
 Uvicorn running on http://127.0.0.1:8000
+```
 
-8️⃣ Test API Using Swagger
+### Step 3 — Test via Swagger UI
 
-Open in browser:
+Open: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
-http://127.0.0.1:8000/docs
+---
 
-📡 Available API Endpoints
-POST /api/chat
+## 📡 API Endpoints
 
-Submit a new query.
+### `GET /api/health`
+Health check — returns `{"status": "ok"}`.
 
-Request Body:
+### `POST /api/chat`
+Submit a query. Returns a `job_id` immediately (async).
 
+**Request:**
+```json
 {
   "session_id": "abc123",
   "query": "What is Node.js?"
 }
-
-
-Response:
-
+```
+**Response:**
+```json
 {
-  "job_id": "uuid",
+  "job_id": "some-uuid",
   "status": "queued"
 }
+```
 
-GET /api/result/{job_id}
+### `GET /api/result/{job_id}`
+Poll for the result.
 
-Retrieve job status.
-
-Response (in progress):
-
+**Response (finished):**
+```json
 {
-  "job_id": "uuid",
+  "job_id": "some-uuid",
+  "status": "finished",
+  "result": "Node.js is a JavaScript runtime...",
+  "error": null
+}
+```
+
+**Response (in progress):**
+```json
+{
+  "job_id": "some-uuid",
   "status": "in_progress",
   "result": null,
   "error": null
 }
+```
 
+---
 
-Response (finished):
+## 🧪 Running Tests
 
-{
-  "job_id": "uuid",
-  "status": "finished",
-  "result": "Answer text...",
-  "error": null
-}
+```bash
+pytest tests/ -v
+```
 
-🔁 Conversational Memory
+> [!NOTE]
+> `test_reranker.py` and `test_sparse_embedder.py` download AI models on first run (~80MB). Tests that require Redis or Qdrant connections will fail if those services are not running.
 
-Memory is stored in Redis
+Fast tests only (no model loading, no network):
+```bash
+pytest tests/test_imports.py tests/test_config.py tests/test_latency.py tests/test_compressor.py tests/test_query_optimizer.py tests/test_eval_citations.py tests/test_chunker.py -v
+```
 
-Each session uses session_id
+---
 
-Same session_id → conversation continues
+## 🔁 Conversational Memory
 
-Different session_id → new conversation
+- Memory is stored in Redis per session
+- Same `session_id` → conversation continues with prior context
+- Different `session_id` → fresh conversation
 
-⚙ Architecture Overview
-Client
-  ↓
-FastAPI
-  ↓
-Redis Queue (Valkey)
-  ↓
-RQ Worker
-  ↓
-RAG Engine
-     ├─ Qdrant (vector search)
-     ├─ SentenceTransformer (embeddings)
-     └─ Ollama (LLM)
-  ↓
-Redis Memory
+The Query Optimizer uses the last 4 messages of history to resolve pronouns and generate contextual query variants.
 
-🧪 Optional Command Line Testing
+---
 
-POST request:
+## 🏁 Startup Order (Important)
 
-curl -X POST http://127.0.0.1:8000/api/chat ^
--H "Content-Type: application/json" ^
--d "{\"session_id\":\"abc123\",\"query\":\"What is Node.js?\"}"
+1. Start Docker containers (Valkey + Qdrant)
+2. Ensure Ollama is running and model is pulled
+3. Place PDFs in `data/pdfs/`
+4. **CLI mode:** `python cli.py` (handles ingestion + chat in one command)
+5. **API mode:** Start RQ worker → Start FastAPI server → POST to `/api/chat`
 
+---
 
-Poll result:
+## 🛑 Troubleshooting
 
-curl http://127.0.0.1:8000/api/result/<job_id>
+### ❌ "Valkey (Redis) is not running"
+```bash
+docker run -d --name valkey -p 6379:6379 valkey/valkey
+```
 
-🛑 Troubleshooting
-❌ Job not processed
+### ❌ "Qdrant Vector DB is not running"
+```bash
+docker run -d --name rag-vector-db -p 6333:6333 qdrant/qdrant
+```
 
-Make sure worker is running:
+### ❌ "Ollama is not running"
+Start Ollama, then check: `ollama list` — make sure `llama3.2:latest` is listed.
 
-rq worker rag --worker-class rq.worker.SimpleWorker
+### ❌ Job not processed
+Ensure the RQ worker is running in a separate terminal.
 
-❌ Redis connection error
+### ❌ No PDFs found
+Ensure `.pdf` files are placed inside `data/pdfs/` (not just `data/`).
 
-Ensure Valkey container is running:
-
-docker ps
-
-❌ Ollama 404 error
-
-Check:
-
-curl http://localhost:11434/api/tags
-
-🏁 System Startup Order (Important)
-
-Start Docker (Valkey + Qdrant)
-
-Ensure Ollama is running
-
-Run ingestion (if needed)
-
-Start RQ worker
-
-Start FastAPI server
-
-Test via /docs
+### ❌ Import errors on startup
+Make sure you activated the virtual environment:
+```bash
+venv\Scripts\activate   # Windows
+source venv/bin/activate  # Mac/Linux
+```
+Then: `pip install -r requirements.txt`

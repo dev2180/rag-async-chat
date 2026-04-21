@@ -11,8 +11,9 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs & Crashes
 *.log
+crash_log.txt
 
 # Redis dump (if any)
 dump.rdb
@@ -23,3 +24,11 @@ storage/
 # IDE
 .vscode/
 .idea/
+
+# Testing
+.pytest_cache/
+
+# Data
+data/pdfs/
+data/qdrant/
+*.pdf
