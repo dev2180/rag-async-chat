@@ -62,22 +62,24 @@ The system has **two operational modes**:
 
 ## RAG Pipeline Flow
 
-```
-User Query
-    ↓
-[Query Optimizer]  ← uses LLM to generate 3 query variants (multi-query expansion + anaphora resolution)
-    ↓
-[Hybrid Retriever × 3 queries]  ← Dense (cosine) + Sparse (BM25) → merged via RRF fusion in Qdrant
-    ↓ (deduplicated pool of up to top_k×2 chunks)
-[CrossEncoder Reranker]  ← re-scores all candidates with ms-marco model for high precision
-    ↓ (top_k best chunks)
-[Context Compressor]  ← drops chunks failing score threshold or keyword overlap check
-    ↓
-[Prompt Builder]  ← assembles system prompt + chat history + compressed context
-    ↓
-[Ollama LLM]  ← generates answer grounded in context only
-    ↓
-AnswerResult { answer, citations, retrieval_metrics, latency_metrics }
+```mermaid
+graph TD
+    UQ([User Query]) --> QO[1. Query Optimizer<br>3 variants]
+    QO -->|Multi-query expansion<br>+ anaphora resolution| HR[2. Hybrid Retriever × 3<br>RRF]
+    HR -->|Dense + Sparse<br>merged via RRF| CR[3. CrossEncoder Reranker]
+    CR -->|Re-scores candidates<br>with ms-marco| CC[4. Context Compressor]
+    CC -->|Filters by threshold<br>and keyword overlap| PB[5. Prompt Builder]
+    PB -->|Assembles prompt<br>+ context + history| LLM((Ollama LLM))
+    LLM --> AR([AnswerResult])
+
+    classDef stage fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px,color:#1e3a8a;
+    classDef textNode fill:none,stroke:none;
+    classDef endpoints fill:#f3f4f6,stroke:#9ca3af,stroke-width:2px,color:#111827;
+    classDef model fill:#fed7aa,stroke:#ea580c,stroke-width:2px,color:#7c2d12;
+    
+    class QO,HR,CR,CC,PB stage;
+    class UQ,AR endpoints;
+    class LLM model;
 ```
 
 ---
