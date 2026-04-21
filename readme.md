@@ -63,7 +63,7 @@ The system has **two operational modes**:
 ## RAG Pipeline Flow
 
 ```mermaid
-graph TD
+graph LR
     UQ([User Query]) --> QO[1. Query Optimizer<br>3 variants]
     QO -->|Multi-query expansion<br>+ anaphora resolution| HR[2. Hybrid Retriever × 3<br>RRF]
     HR -->|Dense + Sparse<br>merged via RRF| CR[3. CrossEncoder Reranker]
